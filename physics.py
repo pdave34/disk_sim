@@ -255,7 +255,7 @@ class Disk(object):
 
     @property
     def r_bins(self):
-        return np.linspace(0, R, self._n + 1)
+        return np.linspace(0, self._R, self._n + 1)
 
     @property
     def phi_edges(self):
@@ -345,9 +345,9 @@ class Disk(object):
     def get_acc(self,p):
         N = self._N
         p2 = self.create_particles(p)
-        ax = np.array([p2[i].gx(p,c) for i in range(N)])
-        ay = np.array([p2[i].gy(p,c) for i in range(N)])
-        az = np.array([p2[i].gz(p,c) for i in range(N)])
+        ax = np.array([p2[i].gx(p,self._c) for i in range(N)])
+        ay = np.array([p2[i].gy(p,self._c) for i in range(N)])
+        az = np.array([p2[i].gz(p,self._c) for i in range(N)])
         del p2
         ax = np.array([np.sum(ax[i]) for i in range(N)])
         ay = np.array([np.sum(ay[i]) for i in range(N)])
