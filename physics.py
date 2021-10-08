@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import numpy as np
+import pickle as pkl
 
 class Particle(object):
     def __init__(self, x, y, z, vx, vy, vz):
@@ -183,6 +184,10 @@ class Disk(object):
         self._vpl = np.zeros(self.Nrings,dtype=float)
         print("Finished initializing disk with paramters (N,R,c,Mh) = ({},{},{},{})".format(N,R,c,Mh))
 
+    @property
+    def com(self):
+        return np.mean(self.p.x), np.mean(self.p.y), np.mean(self.p.z)
+    
     @property
     def tau(self):
         m = np.argmax(self.p.r)
@@ -429,53 +434,49 @@ class Disk(object):
         p._vx, p._vy, p._vz = vx, vy, vz
 
         print("Finished adding dispersion, outermost particle has an orbital period of {:.3f}".format(self.tau))
+    
+    def maxdt(self):
+        ax,ay,az = self.get_acc(self.p)
+        a = np.sqrt(ax**2 + ay**2 + az**2)
+        return 0.2*np.sqrt(self._c/np.max(a))
 
+    def dkd(self,dt):
+        # Drift
+        p = self.p
+        x2 = p.x + p.vx*dt/2 
+        y2 = p.y + p.vy*dt/2
+        z2 = p.z + p.vz*dt/2
+        # Kick
+        p2 = Particle(x2,y2,z2,p.vx,p.vy,p.vz)
+        a2x, a2y, a2z = self.get_acc(p2)
+        vfx = p.vx + a2x*dt
+        vfy = p.vy + a2y*dt
+        vfz = p.vz + a2z*dt
+        # Drift
+        xf = x2 + vfx*dt/2
+        yf = y2 + vfy*dt/2
+        zf = z2 + vfz*dt/2
+        # Set
+        p._x, p._y, p._z = xf, yf, zf
+        p._vx, p._vy, p._vz = vfx, vfy, vfz
+        
 
-
-    def sim(self,tau_max,dt,outdir='disk_out/'):
+    def sim(self,tau_max,dt,outdir='disk_out/',verbose=True):
         t = 0
         tau = self.tau
-
         N = int(tau_max*tau/dt)+1
-        scalars = np.zeros(N, dtype=[('t','<f8'), ('tau','<f8'), ('zrms', '<f8'), ('KE', '<f8'), ('PE', '<f8'), ('tmean', '<f8')])
         print("Starting sim...")
+        p = self.p
         for i in range(N):
-            p = self.p
-            ax,ay,az = self.get_acc(p)
-
-            k1vx, k1vy, k1vz = ax*dt, ay*dt, az*dt
-            k1x, k1y, k1z = p.vx*dt, p.vy*dt, p.vz*dt
-
-            p2 = Particle(p.x+k1x/2,p.y+k1y/2,p.z+k1z/2,p.vx,p.vy,p.vz)
-            a2x,a2y,a2z = self.get_acc(p2)
-
-            k2vx, k2vy, k2vz = a2x*dt, a2y*dt, a2z*dt
-            k2x, k2y, k2z = (p.vx + k1vx/2)*dt, (p.vy + k1vy/2)*dt, (p.vz+k1vz/2)*dt
-
-            p._vx, p._vy, p._vz = p.vx + k2vx, p.vy + k2vy, p.vz + k2vz
-            p._x, p._y, p._z = p.x + k2x, p.y + k2y, p.z + k2z
-
-            del p2
+            self.dkd(dt)
+            if dt > self.maxdt():
+                print("Warning! High acceleration, lower time-step and retry!")
             t += dt
-            scalars['t'][i] = t
-            scalars['tau'][i] = t/tau
-            scalars['zrms'][i] = self.zrms
-            scalars['KE'][i] = self.totKE
-            scalars['PE'][i] = self.totPE
-            scalars['tmean'][i] = self.tmean
 
             if (i%10==0):
-                print("Saving output at t = {:.3f}, tau = {:.3f}".format(t,t/tau))
-                result = np.zeros(len(x),dtype=[('x', '<f8'), ('y', '<f8'), ('z', '<f8'), ('vx', '<f8'),
-                                 ('vy', '<f8'), ('vz', '<f8')])
-                result['x'] = p.x
-                result['y'] = p.y
-                result['z'] = p.z
-                result['vx'] = p.vx
-                result['vy'] = p.vy
-                result['vz'] = p.vz
-                fname = outdir+"disk_t_{:.3f}_R_{:.1f}_c_{:.2f}_Mh_{:.0f}_N_{:.0f}".format(t,self._R,self._c,self._Mh,self._N)
-                np.save(fname,result)
-        print("Finished! Writing scalars...")
-        fname = outdir+"scalars_R_{:.1f}_c_{:.2f}_Mh_{:.0f}_N_{:.0f}".format(self._R,self._c,self._Mh,self._N)
-        np.save(fname,scalars)
+                if verbose:
+                    print("Saving output at t = {:.3f}, tau = {:.3f}".format(t,t/tau))
+                fname = outdir+"disk_t_{:.3f}_R_{:.1f}_c_{:.2f}_Mh_{:.0f}_N_{:.0f}.pkl".format(t,self._R,self._c,self._Mh,self._N)
+                with open(fname, "wb") as outfile:
+                    pkl.dump(self, outfile)
+        print("Finished! Final dump at: "+fname)
