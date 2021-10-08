@@ -1,4 +1,4 @@
-# disk_sim
+# disko
 
 A simple N-body gravity solver to emulate Ostriker & Pebble's 1973 paper (https://ui.adsabs.harvard.edu/abs/1973ApJ...186..467O/abstract)
 
